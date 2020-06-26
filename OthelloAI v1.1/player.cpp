@@ -1,15 +1,18 @@
+#include <cstdio>
 #include <iostream>
 #include <fstream>
-#include <string>
-#include <sstream>
 #include <array>
 #include <vector>
-#include <cassert>
+#include <cstdlib>
+#include <ctime>
+#include <algorithm>
+#define DEPTH 2
+#define INF 2147483647
 
 struct Point {
     int x, y;
 	Point() : Point(0, 0) {}
-	Point(float x, float y) : x(x), y(y) {}
+	Point(int x, int y) : x(x), y(y) {}
 	bool operator==(const Point& rhs) const {
 		return x == rhs.x && y == rhs.y;
 	}
@@ -23,6 +26,11 @@ struct Point {
 		return Point(x - rhs.x, y - rhs.y);
 	}
 };
+
+int player;
+int n_valid_spots;
+const int SIZE = 8;
+std::vector<Point> next_valid_spots;
 
 class OthelloBoard {
 public:
@@ -43,6 +51,8 @@ public:
     int cur_player;
     bool done;
     int winner;
+    Point cur_disc;
+    int heuristic;
 private:
     int get_next_player(int player) const {
         return 3 - player;
@@ -108,6 +118,59 @@ public:
     OthelloBoard() {
         reset();
     }
+    OthelloBoard(const OthelloBoard &rhs) {
+        for (int i = 0; i < SIZE; i++)
+            for (int j = 0; j < SIZE; j++)
+                board[i][j] = rhs.board[i][j];
+        for (int i = 0; i < 3; i++)
+            disc_count[i] = rhs.disc_count[i];
+        cur_player = rhs.cur_player;
+        done = rhs.done;
+        winner = rhs.winner;
+        cur_disc = rhs.cur_disc;
+        heuristic = rhs.heuristic;
+        // no "next_valid_spots";
+    }
+    // modify
+    OthelloBoard& operator=(const OthelloBoard &rhs){
+        for (int i = 0; i < SIZE; i++)
+            for (int j = 0; j < SIZE; j++)
+                board[i][j] = rhs.board[i][j];
+        for (int i = 0; i < 3; i++)
+            disc_count[i] = rhs.disc_count[i];
+        cur_player = rhs.cur_player;
+        done = rhs.done;
+        winner = rhs.winner;
+        cur_disc = rhs.cur_disc;
+        heuristic = rhs.heuristic;
+        return *this;
+    }
+    bool operator<(const OthelloBoard &rhs) const{
+        return heuristic < rhs.heuristic;
+    }
+    bool operator>(const OthelloBoard &rhs) const{
+        return heuristic > rhs.heuristic;
+    }
+    bool operator==(const OthelloBoard &rhs) const{
+        return heuristic == rhs.heuristic;
+    }
+    void set_heuristic(){
+        // modify
+        if(done){
+            if(winner == player)
+                heuristic = INF;
+            else
+                heuristic = -INF;
+        }
+        heuristic = disc_count[cur_player] - disc_count[get_next_player(cur_player)];
+    }
+    void update(Point disc){
+        // modify
+        cur_disc = disc;
+        put_disc(disc);
+        set_heuristic();
+    }
+    //
     void reset() {
         for (int i = 0; i < SIZE; i++) {
             for (int j = 0; j < SIZE; j++) {
@@ -123,6 +186,8 @@ public:
         next_valid_spots = get_valid_spots();
         done = false;
         winner = -1;
+        cur_disc = Point(-1, -1);
+        set_heuristic();
     }
     std::vector<Point> get_valid_spots() const {
         std::vector<Point> valid_spots;
@@ -166,144 +231,86 @@ public:
         }
         return true;
     }
-    std::string encode_player(int state) {
-        if (state == BLACK) return "O";
-        if (state == WHITE) return "X";
-        return "Draw";
-    }
-    std::string encode_spot(int x, int y) {
-        if (is_spot_valid(Point(x, y))) return ".";
-        if (board[x][y] == BLACK) return "O";
-        if (board[x][y] == WHITE) return "X";
-        return " ";
-    }
-    std::string encode_output(Point p, bool fail=false) {
-        int i, j;
-        std::stringstream ss;
-        ss << "Timestep #" << (8*8-4-disc_count[EMPTY]+1) << "\n";
-        ss << "O: " << disc_count[BLACK] << "; X: " << disc_count[WHITE] << "\n";
-        if (fail) {
-            ss << "Winner is " << encode_player(winner) << " (Opponent performed invalid move)\n";
-            ss << "invalid move: (" << p.x << ", " << p.y << ")\n";
-        } else if (next_valid_spots.size() > 0) {
-            ss << encode_player(cur_player) << "'s turn\n";
-        } else {
-            ss << "Winner is " << encode_player(winner) << "\n";
-        }
-        ss << "+---------------+\n";
-        for (i = 0; i < SIZE; i++) {
-            ss << "|";
-            for (j = 0; j < SIZE-1; j++) {
-                ss << encode_spot(i, j) << " ";
-            }
-            ss << encode_spot(i, j) << "|\n";
-        }
-        ss << "+---------------+\n";
-        ss << next_valid_spots.size() << " valid moves: {";
-        if (next_valid_spots.size() > 0) {
-            Point p = next_valid_spots[0];
-            ss << "(" << p.x << "," << p.y << ")";
-        }
-        for (size_t i = 1; i < next_valid_spots.size(); i++) {
-            Point p = next_valid_spots[i];
-            ss << ", (" << p.x << "," << p.y << ")";
-        }
-        ss << "}\n";
-        ss << "=================\n";
-        return ss.str();
-    }
-    std::string encode_state() {
-        int i, j;
-        std::stringstream ss;
-        ss << cur_player << "\n";
-        for (i = 0; i < SIZE; i++) {
-            for (j = 0; j < SIZE-1; j++) {
-                ss << board[i][j] << " ";
-            }
-            ss << board[i][j] << "\n";
-        }
-        ss << next_valid_spots.size() << "\n";
-        for (size_t i = 0; i < next_valid_spots.size(); i++) {
-            Point p = next_valid_spots[i];
-            ss << p.x << " " << p.y << "\n";
-        }
-        return ss.str();
-    }
 };
 
-const std::string file_log = "gamelog.txt";
-const std::string file_state = "state";
-const std::string file_action = "action";
-// Timeout is set to 10 when TA test your code.
-const int timeout = 1;
+OthelloBoard cur_OthelloBoard;
 
-void launch_executable(std::string filename) {
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-    std::string command = "start /min " + filename + " " + file_state + " " + file_action;
-    std::string kill = "timeout /t " + std::to_string(timeout) + " > NUL && taskkill /im " + filename + " > NUL 2>&1";
-    system(command.c_str());
-    system(kill.c_str());
-#elif __linux__
-    std::string command = "timeout " + std::to_string(timeout) + "s " + filename + " " + file_state + " " + file_action;
-    system(command.c_str());
-#elif __APPLE__
-    // May require installing the command by:
-    // brew install coreutils
-    std::string command = "gtimeout " + std::to_string(timeout) + "s " + filename + " " + file_state + " " + file_action;
-    system(command.c_str());
-#endif
+void read_board(std::ifstream& fin) {
+    fin >> player;
+    for (int i = 0; i < SIZE; i++) {
+        for (int j = 0; j < SIZE; j++) {
+            fin >> cur_OthelloBoard.board[i][j];
+        }
+    }
 }
 
-int main(int argc, char** argv) {
-    assert(argc == 3);
-    std::ofstream log("gamelog.txt");
-    std::string player_filename[3];
-    player_filename[1] = argv[1];
-    player_filename[2] = argv[2];
-    std::cout << "Player Black File: " << player_filename[OthelloBoard::BLACK] << std::endl;
-    std::cout << "Player White File: " << player_filename[OthelloBoard::WHITE] << std::endl;
-    OthelloBoard game;
-    std::string data;
-    data = game.encode_output(Point());
-    std::cout << data;
-    log << data;
-    while (!game.done) {
-        // Output current state
-        data = game.encode_state();
-        std::ofstream fout(file_state);
-        fout << data;
-        fout.close();
-        // Run external program
-        launch_executable(player_filename[game.cur_player]);
-        // Read action
-        std::ifstream fin(file_action);
-        Point p(-2, -2);
-        std::cout << "QQQQQQQQQQQQQQQQQQQ\n";
-        while (true) {
-            int x, y;
-            if (!(fin >> x)) break;
-            if (!(fin >> y)) break;
-            p.x = x; p.y = y;
-        }
-        fin.close();
-        // Reset action file
-        if (remove(file_action.c_str()) != 0)
-            std::cerr << "Error removing file: " << file_action << "\n";
-        // Take action
-        if (!game.put_disc(p)) {
-            // If action is invalid.
-            data = game.encode_output(p, true);
-            std::cout << data;
-            log << data;
-            break;
-        }
-        data = game.encode_output(Point());
-        std::cout << data;
-        log << data;
+void read_valid_spots(std::ifstream& fin) {
+    fin >> n_valid_spots;
+    int x, y;
+    for (int i = 0; i < n_valid_spots; i++) {
+        fin >> x >> y;
+//        (cur_OthelloBoard.next_valid_spots).push_back({x, y});
+        next_valid_spots.push_back({x, y});
     }
-    log.close();
-    // Reset state file
-    if (remove(file_state.c_str()) != 0)
-        std::cerr << "Error removing file: " << file_state << "\n";
+}
+
+OthelloBoard minimax(OthelloBoard cur_state, int depth, bool isMax){
+//    return cur_state;
+    printf("minimax\n");
+    // modify
+    if(cur_state.done || depth == 0)
+        return cur_state;
+
+    OthelloBoard alpha;
+    if(isMax){
+        printf("isMax: %d\n", depth);
+        alpha.heuristic = -INF;
+        for(auto i : cur_state.next_valid_spots){
+            printf("(%d, %d)\n", i.x, i.y);
+            OthelloBoard next_state = cur_state;
+            next_state.update(i);
+//            alpha = std::max(alpha, minimax(next_state, depth - 1, false));
+        }
+    }
+    else{
+        printf("isMin: %d\n", depth);
+        alpha.heuristic = INF;
+        for(auto i : cur_state.next_valid_spots){
+            printf("(%d, %d)\n", i.x, i.y);
+            OthelloBoard next_state = cur_state;
+            next_state.update(i);
+//            alpha = std::min(alpha, minimax(next_state, depth - 1, true));
+        }
+    }
+    return alpha;
+}
+
+void write_valid_spot(std::ofstream& fout) {
+    srand(time(NULL));
+
+    Point p = cur_OthelloBoard.next_valid_spots[0];
+    OthelloBoard next_board = minimax(cur_OthelloBoard, DEPTH, true);
+    p = next_board.cur_disc;
+
+    // Remember to flush the output to ensure the last action is written to file.
+    fout << p.x << " " << p.y << std::endl;
+    fout.flush();
+}
+
+int main(int, char** argv) {
+    std::cout << "player\n";
+    std::ifstream fin(argv[1]);
+    std::ofstream fout(argv[2]);
+    read_board(fin);
+    read_valid_spots(fin);
+//    for(int i = 0; i < n_valid_spots; i++)
+//        cur_OthelloBoard.next_valid_spots.push_back(next_valid_spots[i]);
+    cur_OthelloBoard.next_valid_spots = next_valid_spots;
+    cur_OthelloBoard.cur_player = player;
+    cur_OthelloBoard.set_heuristic();
+
+    write_valid_spot(fout);
+    fin.close();
+    fout.close();
     return 0;
 }
