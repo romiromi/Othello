@@ -9,6 +9,8 @@
 #define DEPTH 2
 #define INF 2147483647
 
+using namespace std;
+
 struct Point {
     int x, y;
 	Point() : Point(0, 0) {}
@@ -51,7 +53,7 @@ public:
     int cur_player;
     bool done;
     int winner;
-    Point cur_disc;
+    Point next_disc;
     int heuristic;
 private:
     int get_next_player(int player) const {
@@ -122,26 +124,35 @@ public:
         for (int i = 0; i < SIZE; i++)
             for (int j = 0; j < SIZE; j++)
                 board[i][j] = rhs.board[i][j];
+
+        next_valid_spots.clear();
+        for (auto i : rhs.next_valid_spots)
+            next_valid_spots.push_back(i);
+
         for (int i = 0; i < 3; i++)
             disc_count[i] = rhs.disc_count[i];
         cur_player = rhs.cur_player;
         done = rhs.done;
         winner = rhs.winner;
-        cur_disc = rhs.cur_disc;
+        next_disc = rhs.next_disc;
         heuristic = rhs.heuristic;
-        // no "next_valid_spots";
     }
     // modify
     OthelloBoard& operator=(const OthelloBoard &rhs){
         for (int i = 0; i < SIZE; i++)
             for (int j = 0; j < SIZE; j++)
                 board[i][j] = rhs.board[i][j];
+
+        next_valid_spots.clear();
+        for (auto i : rhs.next_valid_spots)
+            next_valid_spots.push_back(i);
+
         for (int i = 0; i < 3; i++)
             disc_count[i] = rhs.disc_count[i];
         cur_player = rhs.cur_player;
         done = rhs.done;
         winner = rhs.winner;
-        cur_disc = rhs.cur_disc;
+        next_disc = rhs.next_disc;
         heuristic = rhs.heuristic;
         return *this;
     }
@@ -164,12 +175,6 @@ public:
         }
         heuristic = disc_count[cur_player] - disc_count[get_next_player(cur_player)];
     }
-    void update(Point disc){
-        // modify
-        cur_disc = disc;
-        put_disc(disc);
-        set_heuristic();
-    }
     //
     void reset() {
         for (int i = 0; i < SIZE; i++) {
@@ -186,7 +191,7 @@ public:
         next_valid_spots = get_valid_spots();
         done = false;
         winner = -1;
-        cur_disc = Point(-1, -1);
+        next_disc = Point(-1, -1);
         set_heuristic();
     }
     std::vector<Point> get_valid_spots() const {
@@ -229,6 +234,7 @@ public:
                 else winner = WHITE;
             }
         }
+        set_heuristic();
         return true;
     }
 };
@@ -249,48 +255,60 @@ void read_valid_spots(std::ifstream& fin) {
     int x, y;
     for (int i = 0; i < n_valid_spots; i++) {
         fin >> x >> y;
-//        (cur_OthelloBoard.next_valid_spots).push_back({x, y});
-        next_valid_spots.push_back({x, y});
+        cur_OthelloBoard.next_valid_spots.push_back({x, y});
     }
 }
 
-OthelloBoard minimax(OthelloBoard cur_state, int depth, bool isMax){
-//    return cur_state;
-    printf("minimax\n");
+OthelloBoard minimax(OthelloBoard &cur_state, int depth, bool isMax){
     // modify
-    if(cur_state.done || depth == 0)
+    if(cur_state.done || depth == 0){
+//        printf("_______________(%d, %d)\n", cur_state.cur_disc.x, cur_state.cur_disc.y);
         return cur_state;
+    }
 
     OthelloBoard alpha;
     if(isMax){
         printf("isMax: %d\n", depth);
         alpha.heuristic = -INF;
         for(auto i : cur_state.next_valid_spots){
+            for(int j = 0; j < 5 * depth + 1; j++)
+                cout << '-';
+            cout << '\n';
             printf("(%d, %d)\n", i.x, i.y);
             OthelloBoard next_state = cur_state;
-            next_state.update(i);
-//            alpha = std::max(alpha, minimax(next_state, depth - 1, false));
+            next_state.put_disc(i);
+            OthelloBoard next_next = minimax(next_state, depth - 1, false);
+            if(alpha < next_next){
+                alpha = next_next;
+                cur_state.next_disc = i;
+            }
         }
     }
     else{
         printf("isMin: %d\n", depth);
         alpha.heuristic = INF;
         for(auto i : cur_state.next_valid_spots){
+            for(int j = 0; j < 5 * depth + 1; j++)
+                cout << '-';
+            cout << '\n';
             printf("(%d, %d)\n", i.x, i.y);
             OthelloBoard next_state = cur_state;
-            next_state.update(i);
-//            alpha = std::min(alpha, minimax(next_state, depth - 1, true));
+            next_state.put_disc(i);
+            OthelloBoard next_next = minimax(next_state, depth - 1, true);
+            if(alpha > next_next){
+                alpha = next_next;
+                cur_state.next_disc = i;
+            }
         }
     }
     return alpha;
 }
-
 void write_valid_spot(std::ofstream& fout) {
     srand(time(NULL));
 
     Point p = cur_OthelloBoard.next_valid_spots[0];
     OthelloBoard next_board = minimax(cur_OthelloBoard, DEPTH, true);
-    p = next_board.cur_disc;
+    p = cur_OthelloBoard.next_disc;
 
     // Remember to flush the output to ensure the last action is written to file.
     fout << p.x << " " << p.y << std::endl;
@@ -301,11 +319,9 @@ int main(int, char** argv) {
     std::cout << "player\n";
     std::ifstream fin(argv[1]);
     std::ofstream fout(argv[2]);
+    cur_OthelloBoard.next_valid_spots.clear();
     read_board(fin);
     read_valid_spots(fin);
-//    for(int i = 0; i < n_valid_spots; i++)
-//        cur_OthelloBoard.next_valid_spots.push_back(next_valid_spots[i]);
-    cur_OthelloBoard.next_valid_spots = next_valid_spots;
     cur_OthelloBoard.cur_player = player;
     cur_OthelloBoard.set_heuristic();
 

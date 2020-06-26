@@ -278,7 +278,6 @@ int main(int argc, char** argv) {
         // Read action
         std::ifstream fin(file_action);
         Point p(-2, -2);
-        std::cout << "QQQQQQQQQQQQQQQQQQQ\n";
         while (true) {
             int x, y;
             if (!(fin >> x)) break;
