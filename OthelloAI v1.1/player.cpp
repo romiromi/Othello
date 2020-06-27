@@ -7,6 +7,7 @@
 #include <ctime>
 #include <algorithm>
 #define DEPTH 2
+#define MAX_MOVE
 #define INF 2147483647
 
 using namespace std;
@@ -239,6 +240,7 @@ public:
     }
 };
 
+vector<OthelloBoard> tree[MAX_MOVE];
 OthelloBoard cur_OthelloBoard;
 
 void read_board(std::ifstream& fin) {
@@ -262,7 +264,6 @@ void read_valid_spots(std::ifstream& fin) {
 OthelloBoard minimax(OthelloBoard &cur_state, int depth, bool isMax){
     // modify
     if(cur_state.done || depth == 0){
-//        printf("_______________(%d, %d)\n", cur_state.cur_disc.x, cur_state.cur_disc.y);
         return cur_state;
     }
 
@@ -270,34 +271,57 @@ OthelloBoard minimax(OthelloBoard &cur_state, int depth, bool isMax){
     if(isMax){
         printf("isMax: %d\n", depth);
         alpha.heuristic = -INF;
+        // dfs corners
         for(auto i : cur_state.next_valid_spots){
-            for(int j = 0; j < 5 * depth + 1; j++)
-                cout << '-';
-            cout << '\n';
-            printf("(%d, %d)\n", i.x, i.y);
-            OthelloBoard next_state = cur_state;
-            next_state.put_disc(i);
-            OthelloBoard next_next = minimax(next_state, depth - 1, false);
-            if(alpha < next_next){
-                alpha = next_next;
-                cur_state.next_disc = i;
+            if(i == Point(0, 0) || i == Point(0, SIZE-1) || \
+               i == Point(SIZE-1, 0) || i == Point(SIZE-1, SIZE-1)){
+                OthelloBoard next_state = cur_state;
+                next_state.put_disc(i);
+                OthelloBoard next_next = minimax(next_state, depth - 1, false);
+                if(alpha < next_next){
+                    alpha = next_next;
+                    cur_state.next_disc = i;
+                }
+            }
+        }
+        // dfs others
+        if(alpha.heuristic == -INF){
+            for(auto i : cur_state.next_valid_spots){
+                OthelloBoard next_state = cur_state;
+                next_state.put_disc(i);
+                OthelloBoard next_next = minimax(next_state, depth - 1, false);
+                if(alpha < next_next){
+                    alpha = next_next;
+                    cur_state.next_disc = i;
+                }
             }
         }
     }
     else{
         printf("isMin: %d\n", depth);
         alpha.heuristic = INF;
+        // dfs corners
         for(auto i : cur_state.next_valid_spots){
-            for(int j = 0; j < 5 * depth + 1; j++)
-                cout << '-';
-            cout << '\n';
-            printf("(%d, %d)\n", i.x, i.y);
-            OthelloBoard next_state = cur_state;
-            next_state.put_disc(i);
-            OthelloBoard next_next = minimax(next_state, depth - 1, true);
-            if(alpha > next_next){
-                alpha = next_next;
-                cur_state.next_disc = i;
+            if(i == Point(0, 0) || i == Point(0, SIZE-1) || \
+               i == Point(SIZE-1, 0) || i == Point(SIZE-1, SIZE-1)){    OthelloBoard next_state = cur_state;
+                next_state.put_disc(i);
+                OthelloBoard next_next = minimax(next_state, depth - 1, true);
+                if(alpha > next_next){
+                    alpha = next_next;
+                    cur_state.next_disc = i;
+                }
+            }
+        }
+        // dfs others
+        if(alpha.heuristic == INF){
+            for(auto i : cur_state.next_valid_spots){
+                OthelloBoard next_state = cur_state;
+                next_state.put_disc(i);
+                OthelloBoard next_next = minimax(next_state, depth - 1, true);
+                if(alpha > next_next){
+                    alpha = next_next;
+                    cur_state.next_disc = i;
+                }
             }
         }
     }
