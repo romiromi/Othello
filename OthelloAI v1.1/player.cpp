@@ -5,12 +5,28 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <cmath>
 #include <algorithm>
-#define DEPTH 2
-#define MAX_MOVE
+#define DEPTH 6
 #define INF 2147483647
 
 using namespace std;
+
+int player;
+int n_valid_spots;
+const int SIZE = 8;
+
+int weight1[SIZE][SIZE] =
+{
+    {65,  -3, 6, 4, 4, 6,  -3, 65},
+    {-3, -29, 3, 1, 1, 3, -29, -3},
+    {6,    3, 5, 3, 3, 5,   3,  6},
+    {4,    1, 3, 1, 1, 3,   1,  4},
+    {4,    1, 3, 1, 1, 3,   1,  4},
+    {6,    3, 5, 3, 3, 5,   3,  6},
+    {-3, -29, 3, 1, 1, 3, -29, -3},
+    {65,  -3, 6, 4, 4, 6,  -3, 65}
+};
 
 struct Point {
     int x, y;
@@ -28,12 +44,12 @@ struct Point {
 	Point operator-(const Point& rhs) const {
 		return Point(x - rhs.x, y - rhs.y);
 	}
+	Point& operator=(const Point &rhs){
+	    x = rhs.x;
+	    y = rhs.y;
+	    return *this;
+	}
 };
-
-int player;
-int n_valid_spots;
-const int SIZE = 8;
-std::vector<Point> next_valid_spots;
 
 class OthelloBoard {
 public:
@@ -42,11 +58,36 @@ public:
         BLACK = 1,
         WHITE = 2
     };
-    static const int SIZE = 8;
     const std::array<Point, 8> directions{{
         Point(-1, -1), Point(-1, 0), Point(-1, 1),
         Point(0, -1), /*{0, 0}, */Point(0, 1),
         Point(1, -1), Point(1, 0), Point(1, 1)
+    }};
+    const std::array<Point, 4> corners1{{
+        Point(0, 0), Point(0, SIZE-1),
+        Point(SIZE-1, 0), Point(SIZE-1, SIZE-1)
+    }};
+    const std::array<Point, 4> creepingEdges1{{
+        Point(0, 1), Point(0, -1),
+        Point(0, 1), Point(0, -1)
+    }};
+    const std::array<Point, 4> corners2{{
+        Point(0, 0), Point(SIZE-1, 0),
+        Point(0, SIZE-1), Point(SIZE-1, SIZE-1)
+    }};
+    const std::array<Point, 4> creepingEdges2{{
+        Point(0, 1), Point(-1, 0),
+        Point(0, 1), Point(-1, 0)
+    }};
+    const std::array<Point, 4> Xsquares{{
+        Point(1, 1), Point(1, SIZE-2),
+        Point(SIZE-2, 1), Point(SIZE-2, SIZE-2)
+    }};
+    const std::array<Point, 8> Csquares{{
+        Point(0, 1), Point(1, 0),
+        Point(0, SIZE-2), Point(1, SIZE-1),
+        Point{SIZE-2, 0}, Point(SIZE-1, 1),
+        Point(SIZE-2, SIZE-1), Point(SIZE-1, SIZE-2)
     }};
     std::array<std::array<int, SIZE>, SIZE> board;
     std::vector<Point> next_valid_spots;
@@ -125,11 +166,7 @@ public:
         for (int i = 0; i < SIZE; i++)
             for (int j = 0; j < SIZE; j++)
                 board[i][j] = rhs.board[i][j];
-
-        next_valid_spots.clear();
-        for (auto i : rhs.next_valid_spots)
-            next_valid_spots.push_back(i);
-
+        next_valid_spots = rhs.next_valid_spots;
         for (int i = 0; i < 3; i++)
             disc_count[i] = rhs.disc_count[i];
         cur_player = rhs.cur_player;
@@ -138,16 +175,11 @@ public:
         next_disc = rhs.next_disc;
         heuristic = rhs.heuristic;
     }
-    // modify
     OthelloBoard& operator=(const OthelloBoard &rhs){
         for (int i = 0; i < SIZE; i++)
             for (int j = 0; j < SIZE; j++)
                 board[i][j] = rhs.board[i][j];
-
-        next_valid_spots.clear();
-        for (auto i : rhs.next_valid_spots)
-            next_valid_spots.push_back(i);
-
+        next_valid_spots = rhs.next_valid_spots;
         for (int i = 0; i < 3; i++)
             disc_count[i] = rhs.disc_count[i];
         cur_player = rhs.cur_player;
@@ -166,15 +198,132 @@ public:
     bool operator==(const OthelloBoard &rhs) const{
         return heuristic == rhs.heuristic;
     }
+    bool operator<=(const OthelloBoard &rhs) const{
+        return heuristic <= rhs.heuristic;
+    }
+    bool operator>=(const OthelloBoard &rhs) const{
+        return heuristic >= rhs.heuristic;
+    }
     void set_heuristic(){
-        // modify
-        if(done){
-            if(winner == player)
-                heuristic = INF;
-            else
-                heuristic = -INF;
+        // set weight table
+        for(int i = 0; i < 4; i++){
+            Point c = corners1[i];
+            if(get_disc(c) == player){
+                Point p = Xsquares[i];
+                weight1[p.x][p.y] = abs(weight1[p.x][p.y]) * 2;
+                p = Csquares[i * 2];
+                weight1[p.x][p.y] = abs(weight1[p.x][p.y]) * 2;
+                p = Csquares[i * 2 + 1];
+                weight1[p.x][p.y] = abs(weight1[p.x][p.y]) * 2;
+            }
         }
-        heuristic = disc_count[cur_player] - disc_count[get_next_player(cur_player)];
+
+        int h = 0;
+        int opponent = get_next_player(player);
+        for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+                if(board[i][j] == player){
+                    h += weight1[i][j];
+                }
+                else if(board[i][j] == opponent){
+                    h -= weight1[i][j];
+                }
+            }
+        }
+
+        // mobility
+        int mobi = next_valid_spots.size();
+        if(cur_player == opponent)
+            mobi *= (-1);
+
+        // stable discs
+        int j = 0;
+        int stable = 0;
+        if(disc_count[EMPTY] < 40){
+            for(int i = 0; i < 4; i++){
+                if(j == 6){
+                    j = 0;
+                    continue;
+                }
+                Point cur = corners1[i];
+                for(j = 0; j < 6; j++){
+                    int cur_disc = get_disc(cur);
+                    if(cur_disc != player)
+                        break;
+                    stable++;
+                    cur = cur + creepingEdges1[i];
+                }
+            }
+            j = 0;
+            for(int i = 0; i < 4; i++){
+                if(j == 6){
+                    j = 0;
+                    continue;
+                }
+                Point cur = corners2[i];
+                for(j = 0; j < 6; j++){
+                    int cur_disc = get_disc(cur);
+                    if(cur_disc != player)
+                        break;
+                    stable++;
+                    cur = cur + creepingEdges2[i];
+                }
+            }
+            j = 0;
+            for(int i = 0; i < 4; i++){
+                if(j == 6){
+                    j = 0;
+                    continue;
+                }
+                Point cur = corners1[i];
+                for(j = 0; j < 6; j++){
+                    int cur_disc = get_disc(cur);
+                    if(cur_disc != opponent)
+                        break;
+                    stable--;
+                    cur = cur + creepingEdges1[i];
+                }
+            }
+            j = 0;
+            for(int i = 0; i < 4; i++){
+                if(j == 6){
+                    j = 0;
+                    continue;
+                }
+                Point cur = corners2[i];
+                for(j = 0; j < 6; j++){
+                    int cur_disc = get_disc(cur);
+                    if(cur_disc != opponent)
+                        break;
+                    stable--;
+                    cur = cur + creepingEdges2[i];
+                }
+            }
+        }
+
+        // flip discs
+        int flip = disc_count[player] - disc_count[opponent];
+
+
+        if(disc_count[EMPTY] > 40) // disc: 1-20
+            heuristic = h * 1 + mobi * 10 + stable * 10 + flip * (-1);
+        else if(disc_count[EMPTY] > 20) // disc: 21-40
+            heuristic = h * 1 + mobi * 10 + stable * 10 + flip * 0;
+        else // disc: 41-60
+            heuristic = h * 1 + mobi * 10 + stable * 10 + flip * 2;
+
+        // reset weight table
+        for(int i = 0; i < 4; i++){
+            Point c = corners1[i];
+            if(get_disc(c) == player){
+                Point p = Xsquares[i];
+                weight1[p.x][p.y] = -abs(weight1[p.x][p.y] / 2);
+                p = Csquares[i * 2];
+                weight1[p.x][p.y] = -abs(weight1[p.x][p.y] / 2);
+                p = Csquares[i * 2 + 1];
+                weight1[p.x][p.y] = -abs(weight1[p.x][p.y] / 2);
+            }
+        }
     }
     //
     void reset() {
@@ -240,8 +389,8 @@ public:
     }
 };
 
-vector<OthelloBoard> tree[MAX_MOVE];
 OthelloBoard cur_OthelloBoard;
+std::vector<Point> next_valid_spots;
 
 void read_board(std::ifstream& fin) {
     fin >> player;
@@ -261,86 +410,77 @@ void read_valid_spots(std::ifstream& fin) {
     }
 }
 
-OthelloBoard minimax(OthelloBoard &cur_state, int depth, bool isMax){
-    // modify
+OthelloBoard minimax(OthelloBoard &cur_state, int depth, \
+                     OthelloBoard alpha, OthelloBoard beta, bool isMax, std::ofstream& fout){
     if(cur_state.done || depth == 0){
         return cur_state;
     }
 
-    OthelloBoard alpha;
+    OthelloBoard val;
     if(isMax){
-        printf("isMax: %d\n", depth);
-        alpha.heuristic = -INF;
-        // dfs corners
+//        printf("isMax: %d\n", depth);
+        val.heuristic = -INF;
         for(auto i : cur_state.next_valid_spots){
-            if(i == Point(0, 0) || i == Point(0, SIZE-1) || \
-               i == Point(SIZE-1, 0) || i == Point(SIZE-1, SIZE-1)){
-                OthelloBoard next_state = cur_state;
-                next_state.put_disc(i);
-                OthelloBoard next_next = minimax(next_state, depth - 1, false);
-                if(alpha < next_next){
-                    alpha = next_next;
-                    cur_state.next_disc = i;
+            OthelloBoard next_state = cur_state;
+            next_state.put_disc(i);
+            OthelloBoard next_val = minimax(next_state, depth - 1, alpha, beta, false, fout);
+            if(val < next_val){
+                val = next_val;
+                cur_state.next_disc = i;
+                if(depth == DEPTH){
+                    fout << i.x << " " << i.y << std::endl;
+                    fout.flush();
                 }
             }
-        }
-        // dfs others
-        if(alpha.heuristic == -INF){
-            for(auto i : cur_state.next_valid_spots){
-                OthelloBoard next_state = cur_state;
-                next_state.put_disc(i);
-                OthelloBoard next_next = minimax(next_state, depth - 1, false);
-                if(alpha < next_next){
-                    alpha = next_next;
-                    cur_state.next_disc = i;
-                }
-            }
+            if(alpha < val)
+                alpha = val;
+            if(beta <= alpha)
+                break;
         }
     }
     else{
-        printf("isMin: %d\n", depth);
-        alpha.heuristic = INF;
-        // dfs corners
+//        printf("isMin: %d\n", depth);
+        val.heuristic = INF;
         for(auto i : cur_state.next_valid_spots){
-            if(i == Point(0, 0) || i == Point(0, SIZE-1) || \
-               i == Point(SIZE-1, 0) || i == Point(SIZE-1, SIZE-1)){    OthelloBoard next_state = cur_state;
-                next_state.put_disc(i);
-                OthelloBoard next_next = minimax(next_state, depth - 1, true);
-                if(alpha > next_next){
-                    alpha = next_next;
-                    cur_state.next_disc = i;
-                }
+            OthelloBoard next_state = cur_state;
+            next_state.put_disc(i);
+            OthelloBoard next_val = minimax(next_state, depth - 1, alpha, beta, true, fout);
+            if(val > next_val){
+                val = next_val;
+                cur_state.next_disc = i;
             }
-        }
-        // dfs others
-        if(alpha.heuristic == INF){
-            for(auto i : cur_state.next_valid_spots){
-                OthelloBoard next_state = cur_state;
-                next_state.put_disc(i);
-                OthelloBoard next_next = minimax(next_state, depth - 1, true);
-                if(alpha > next_next){
-                    alpha = next_next;
-                    cur_state.next_disc = i;
-                }
-            }
+            if(beta > val)
+                beta = val;
+            if(beta <= alpha)
+                break;
         }
     }
-    return alpha;
+    return val;
 }
 void write_valid_spot(std::ofstream& fout) {
     srand(time(NULL));
 
-    Point p = cur_OthelloBoard.next_valid_spots[0];
-    OthelloBoard next_board = minimax(cur_OthelloBoard, DEPTH, true);
-    p = cur_OthelloBoard.next_disc;
+    if(n_valid_spots){
+        cur_OthelloBoard.next_disc = cur_OthelloBoard.next_valid_spots[0];
+        Point p = cur_OthelloBoard.next_disc;
+        fout << p.x << " " << p.y << std::endl;
+        fout.flush();
 
-    // Remember to flush the output to ensure the last action is written to file.
-    fout << p.x << " " << p.y << std::endl;
-    fout.flush();
+
+        OthelloBoard alpha, beta;
+        alpha.heuristic = -INF;
+        beta.heuristic = INF;
+        OthelloBoard next_board = minimax(cur_OthelloBoard, DEPTH, alpha, beta, true, fout);
+
+        // Remember to flush the output to ensure the last action is written to file.
+        p = cur_OthelloBoard.next_disc;
+        fout << p.x << " " << p.y << std::endl;
+        fout.flush();
+    }
 }
 
 int main(int, char** argv) {
-    std::cout << "player\n";
+//    std::cout << "player\n";
     std::ifstream fin(argv[1]);
     std::ofstream fout(argv[2]);
     cur_OthelloBoard.next_valid_spots.clear();

@@ -6,6 +6,9 @@
 #include <vector>
 #include <cassert>
 
+
+std::string player_filename[3];
+
 struct Point {
     int x, y;
 	Point() : Point(0, 0) {}
@@ -188,7 +191,7 @@ public:
         } else if (next_valid_spots.size() > 0) {
             ss << encode_player(cur_player) << "'s turn\n";
         } else {
-            ss << "Winner is " << encode_player(winner) << "\n";
+            ss << "Winner is " << player_filename[winner] << "\n";
         }
         ss << "+---------------+\n";
         for (i = 0; i < SIZE; i++) {
@@ -235,7 +238,7 @@ const std::string file_log = "gamelog.txt";
 const std::string file_state = "state";
 const std::string file_action = "action";
 // Timeout is set to 10 when TA test your code.
-const int timeout = 1;
+const int timeout = 10;
 
 void launch_executable(std::string filename) {
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
@@ -257,7 +260,6 @@ void launch_executable(std::string filename) {
 int main(int argc, char** argv) {
     assert(argc == 3);
     std::ofstream log("gamelog.txt");
-    std::string player_filename[3];
     player_filename[1] = argv[1];
     player_filename[2] = argv[2];
     std::cout << "Player Black File: " << player_filename[OthelloBoard::BLACK] << std::endl;
@@ -283,6 +285,7 @@ int main(int argc, char** argv) {
             if (!(fin >> x)) break;
             if (!(fin >> y)) break;
             p.x = x; p.y = y;
+//            printf("p.x=%d p.y=%d\n", p.x, p.y);
         }
         fin.close();
         // Reset action file
